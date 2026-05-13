@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-
+import 'package:permission_handler/permission_handler.dart';
 import '../../../data/models/product.dart';
 import '../../../data/qr/warehouse_qr.dart';
 import '../../../data/repositories/mock_product_repository.dart';
@@ -22,13 +22,35 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   final MobileScannerController _controller = MobileScannerController();
 
   bool _handlingScan = false;
+  bool _requestingCameraPermission = true;
+  bool _cameraPermissionGranted = false;
   String? _lastRaw;
   String? _lastMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _requestCameraPermission();
+  }
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _requestCameraPermission() async {
+    setState(() => _requestingCameraPermission = true);
+
+    final status = await Permission.camera.request();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _cameraPermissionGranted = status.isGranted;
+      _requestingCameraPermission = false;
+    });
   }
 
   Future<void> _handleRaw(String raw) async {
@@ -152,21 +174,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       body: Column(
         children: [
           Expanded(
-            child: MobileScanner(
-              controller: _controller,
-              onDetect: (capture) {
-                final barcodes = capture.barcodes;
-                if (barcodes.isEmpty) {
-                  return;
-                }
-
-                final raw = barcodes.first.rawValue ?? '';
-                _handleRaw(raw);
-              },
-              errorBuilder: (context, error, child) {
-                return _CameraErrorView(message: _cameraErrorMessage(error));
-              },
-            ),
+            child: _buildScanner(),
           ),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -192,6 +200,34 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     );
   }
 
+  Widget _buildScanner() {
+    if (_requestingCameraPermission) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (!_cameraPermissionGranted) {
+      return _CameraPermissionView(
+        onRetry: _requestCameraPermission,
+      );
+    }
+
+    return MobileScanner(
+      controller: _controller,
+      onDetect: (capture) {
+        final barcodes = capture.barcodes;
+        if (barcodes.isEmpty) {
+          return;
+        }
+
+        final raw = barcodes.first.rawValue ?? '';
+        _handleRaw(raw);
+      },
+      errorBuilder: (context, error, child) {
+        return _CameraErrorView(message: _cameraErrorMessage(error));
+      },
+    );
+  }
+
   String _cameraErrorMessage(Object error) {
     final text = error.toString();
     final lower = text.toLowerCase();
@@ -205,6 +241,43 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     }
 
     return 'Ошибка камеры: $text';
+  }
+}
+
+class _CameraPermissionView extends StatelessWidget {
+  const _CameraPermissionView({
+    required this.onRetry,
+  });
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Нужен доступ к камере, чтобы сканировать QR-коды.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: onRetry,
+              child: const Text('Разрешить доступ'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+              child: const Text('Назад'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

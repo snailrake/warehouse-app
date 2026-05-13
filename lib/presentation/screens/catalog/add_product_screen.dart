@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../data/models/product.dart';
@@ -39,6 +40,22 @@ class _AddProductScreenState extends State<AddProductScreen> {
   }
 
   Future<void> _pickImage() async {
+    final status = await Permission.photos.request();
+    if (!status.isGranted && !status.isLimited) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Нужен доступ к галерее, чтобы выбрать изображение.'),
+          ),
+        );
+      return;
+    }
+
     try {
       final image = await _imagePicker.pickMedia();
       if (image == null) {
