@@ -23,7 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     FocusScope.of(context).unfocus();
 
     if (!_formKey.currentState!.validate()) {
@@ -31,10 +31,14 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     final authController = context.read<AuthController>();
-    final success = authController.login(
+    final success = await authController.login(
       email: _emailController.text.trim(),
       password: _passwordController.text.trim(),
     );
+
+    if (!mounted) {
+      return;
+    }
 
     if (!success) {
       ScaffoldMessenger.of(context)
@@ -49,7 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authController = context.read<AuthController>();
+    final authController = context.watch<AuthController>();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Вход')),
@@ -71,9 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
               TextFormField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                ),
+                decoration: const InputDecoration(labelText: 'Email'),
                 validator: _validateEmail,
                 onChanged: (_) => authController.clearError(),
               ),
@@ -81,16 +83,20 @@ class _LoginScreenState extends State<LoginScreen> {
               TextFormField(
                 controller: _passwordController,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Пароль',
-                ),
+                decoration: const InputDecoration(labelText: 'Пароль'),
                 validator: _validatePassword,
                 onChanged: (_) => authController.clearError(),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _submit,
-                child: const Text('Войти'),
+                onPressed: authController.isBusy ? null : _submit,
+                child: authController.isBusy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Войти'),
               ),
               const SizedBox(height: 8),
               TextButton(

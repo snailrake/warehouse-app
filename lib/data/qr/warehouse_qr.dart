@@ -24,4 +24,3 @@ class WarehouseQr {
     return id;
   }
 }
-

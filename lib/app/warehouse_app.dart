@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../data/repositories/mock_product_repository.dart';
+import '../data/repositories/product_repository.dart';
 import '../presentation/controllers/auth_controller.dart';
 import '../presentation/screens/auth/login_screen.dart';
 import '../presentation/screens/catalog/product_list_screen.dart';
@@ -12,7 +12,7 @@ class WarehouseApp extends StatelessWidget {
     required this.productRepository,
   });
 
-  final MockProductRepository productRepository;
+  final ProductRepository productRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -30,9 +30,7 @@ class WarehouseApp extends StatelessWidget {
 
   ThemeData _buildTheme() {
     const primaryColor = Color(0xFF1565C0);
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: primaryColor,
-    );
+    final colorScheme = ColorScheme.fromSeed(seedColor: primaryColor);
 
     return ThemeData(
       colorScheme: colorScheme,

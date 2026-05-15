@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
+
+import '../../../data/models/app_user.dart';
 import '../../../data/models/product.dart';
 import '../../../data/qr/warehouse_qr.dart';
-import '../../../data/repositories/mock_product_repository.dart';
+import '../../../data/repositories/product_repository.dart';
+import '../../controllers/auth_controller.dart';
 import '../catalog/product_details_screen.dart';
 
 class QrScannerScreen extends StatefulWidget {
@@ -12,7 +16,7 @@ class QrScannerScreen extends StatefulWidget {
     required this.productRepository,
   });
 
-  final MockProductRepository productRepository;
+  final ProductRepository productRepository;
 
   @override
   State<QrScannerScreen> createState() => _QrScannerScreenState();
@@ -67,17 +71,21 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     await _controller.stop();
 
     try {
+      if (!mounted) {
+        return;
+      }
+
       final trimmed = raw.trim();
       if (trimmed.isEmpty) {
         await _showError(
           title: 'Пустые данные',
-          message: 'QR-код не содержит текста.',
+          message: 'QR-код не содержит текст.',
         );
         return;
       }
 
-      final id = WarehouseQr.tryDecodeProductId(trimmed);
-      if (id == null) {
+      final productId = WarehouseQr.tryDecodeProductId(trimmed);
+      if (productId == null) {
         await _showError(
           title: 'Некорректный QR-код',
           message: 'Содержимое: $trimmed',
@@ -85,22 +93,44 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         return;
       }
 
-      final product = widget.productRepository.getProductById(id);
-      if (product == null) {
+      final user = context.read<AuthController>().currentUser;
+      if (user == null) {
         await _showError(
-          title: 'Товар не найден',
-          message: 'ID из QR-кода: $id',
+          title: 'Нет доступа',
+          message: 'Нужно войти в систему, чтобы работать с товарами.',
         );
         return;
       }
 
-      await _showProductFound(product);
+      if (!_canTakeReturn(user)) {
+        await _showError(
+          title: 'Нет доступа',
+          message: 'Ваша роль не позволяет брать и возвращать товары.',
+        );
+        return;
+      }
+
+      final result = await widget.productRepository.toggleTakeReturn(
+        productId: productId,
+        userId: user.id,
+      );
+
+      await _showResult(result.product, action: result.action);
+    } catch (e) {
+      await _showError(
+        title: 'Ошибка',
+        message: e.toString(),
+      );
     } finally {
       if (mounted) {
         await _controller.start();
       }
       _handlingScan = false;
     }
+  }
+
+  bool _canTakeReturn(AppUser user) {
+    return user.role == UserRole.admin || user.role == UserRole.employee;
   }
 
   Future<void> _showError({
@@ -126,19 +156,20 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     );
   }
 
-  Future<void> _showProductFound(Product product) async {
+  Future<void> _showResult(Product product, {required String action}) async {
+    final actionText = action == 'take' ? 'взят' : 'возвращен';
     setState(() {
-      _lastMessage = 'Найден товар: ${product.name} (ID: ${product.id})';
+      _lastMessage = 'Товар $actionText: ${product.name} (ID: ${product.id})';
     });
 
     final openDetails = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Товар найден'),
+        title: Text(action == 'take' ? 'Товар взят' : 'Товар возвращен'),
         content: Text(
           'ID: ${product.id}\n'
           'Название: ${product.name}\n'
-          'Статус: ${product.status == ProductStatus.available ? 'Свободен' : 'Занят'}\n\n'
+          'Статус: ${product.status == ProductStatus.available ? 'Доступен' : 'Взят'}\n\n'
           '${product.shortDescription}',
         ),
         actions: [
@@ -161,7 +192,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     if (openDetails == true) {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => ProductDetailsScreen(product: product),
+          builder: (_) => ProductDetailsScreen(productId: product.id),
         ),
       );
     }
@@ -173,9 +204,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       appBar: AppBar(title: const Text('Сканирование QR')),
       body: Column(
         children: [
-          Expanded(
-            child: _buildScanner(),
-          ),
+          Expanded(child: _buildScanner()),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -206,9 +235,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     }
 
     if (!_cameraPermissionGranted) {
-      return _CameraPermissionView(
-        onRetry: _requestCameraPermission,
-      );
+      return _CameraPermissionView(onRetry: _requestCameraPermission);
     }
 
     return MobileScanner(
@@ -310,4 +337,3 @@ class _CameraErrorView extends StatelessWidget {
     );
   }
 }
-

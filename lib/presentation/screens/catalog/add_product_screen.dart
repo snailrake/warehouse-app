@@ -4,8 +4,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../data/models/product.dart';
+import '../../../data/product_defaults.dart';
 import '../../../data/qr/warehouse_qr.dart';
-import '../../../data/repositories/mock_product_repository.dart';
+import '../../../data/repositories/product_repository.dart';
 import '../../widgets/product_image.dart';
 
 class AddProductScreen extends StatefulWidget {
@@ -14,7 +15,7 @@ class AddProductScreen extends StatefulWidget {
     required this.productRepository,
   });
 
-  final MockProductRepository productRepository;
+  final ProductRepository productRepository;
 
   @override
   State<AddProductScreen> createState() => _AddProductScreenState();
@@ -30,6 +31,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   ProductStatus _status = ProductStatus.available;
   String? _selectedImagePath;
   Product? _lastCreatedProduct;
+  bool _busy = false;
 
   @override
   void dispose() {
@@ -76,37 +78,52 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
   }
 
-  void _createProduct() {
+  Future<void> _createProduct() async {
     FocusScope.of(context).unfocus();
+
+    if (_busy) {
+      return;
+    }
 
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final product = widget.productRepository.addProduct(
-      name: _nameController.text.trim(),
-      shortDescription: _shortDescriptionController.text.trim(),
-      description: _descriptionController.text.trim(),
-      imagePath:
-          _selectedImagePath ?? MockProductRepository.placeholderImagePath,
-      status: _status,
-    );
+    setState(() => _busy = true);
 
-    setState(() {
-      _lastCreatedProduct = product;
-      _status = ProductStatus.available;
-      _selectedImagePath = null;
-    });
-
-    _nameController.clear();
-    _shortDescriptionController.clear();
-    _descriptionController.clear();
-
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text('Товар создан (ID: ${product.id})')),
+    try {
+      final product = await widget.productRepository.addProduct(
+        name: _nameController.text.trim(),
+        shortDescription: _shortDescriptionController.text.trim(),
+        description: _descriptionController.text.trim(),
+        imagePath: _selectedImagePath ?? ProductDefaults.placeholderImagePath,
+        status: _status,
       );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _lastCreatedProduct = product;
+        _status = ProductStatus.available;
+        _selectedImagePath = null;
+      });
+
+      _nameController.clear();
+      _shortDescriptionController.clear();
+      _descriptionController.clear();
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('Товар создан (ID: ${product.id})')),
+        );
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
   }
 
   @override
@@ -147,14 +164,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
-                  onPressed: _pickImage,
+                  onPressed: _busy ? null : _pickImage,
                   icon: const Icon(Icons.photo_library_outlined),
                   label: const Text('Выбрать картинку из галереи'),
                 ),
                 const SizedBox(height: 12),
                 ProductImage(
                   imagePath: _selectedImagePath ??
-                      MockProductRepository.placeholderImagePath,
+                      ProductDefaults.placeholderImagePath,
                   width: double.infinity,
                   height: 160,
                 ),
@@ -173,24 +190,32 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   items: const [
                     DropdownMenuItem(
                       value: ProductStatus.available,
-                      child: Text('Свободен'),
+                      child: Text('Доступен'),
                     ),
                     DropdownMenuItem(
                       value: ProductStatus.reserved,
-                      child: Text('Занят'),
+                      child: Text('Взят'),
                     ),
                   ],
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setState(() => _status = value);
-                  },
+                  onChanged: _busy
+                      ? null
+                      : (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() => _status = value);
+                        },
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: _createProduct,
-                  child: const Text('Создать товар и QR-код'),
+                  onPressed: _busy ? null : _createProduct,
+                  child: _busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Создать товар и QR-код'),
                 ),
               ],
             ),

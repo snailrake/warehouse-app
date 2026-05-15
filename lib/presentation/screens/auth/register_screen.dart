@@ -26,7 +26,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     FocusScope.of(context).unfocus();
 
     if (!_formKey.currentState!.validate()) {
@@ -34,11 +34,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     final authController = context.read<AuthController>();
-    final success = authController.register(
+    final success = await authController.register(
       name: _nameController.text.trim(),
       email: _emailController.text.trim(),
       password: _passwordController.text.trim(),
     );
+
+    if (!mounted) {
+      return;
+    }
 
     if (!success) {
       ScaffoldMessenger.of(context)
@@ -64,7 +68,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authController = context.read<AuthController>();
+    final authController = context.watch<AuthController>();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Регистрация')),
@@ -85,9 +89,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Имя',
-                ),
+                decoration: const InputDecoration(labelText: 'Имя'),
                 validator: _validateName,
                 onChanged: (_) => authController.clearError(),
               ),
@@ -95,9 +97,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               TextFormField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                ),
+                decoration: const InputDecoration(labelText: 'Email'),
                 validator: _validateEmail,
                 onChanged: (_) => authController.clearError(),
               ),
@@ -105,9 +105,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               TextFormField(
                 controller: _passwordController,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Пароль',
-                ),
+                decoration: const InputDecoration(labelText: 'Пароль'),
                 validator: _validatePassword,
                 onChanged: (_) => authController.clearError(),
               ),
@@ -115,21 +113,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
               TextFormField(
                 controller: _confirmPasswordController,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Подтверждение пароля',
-                ),
+                decoration:
+                    const InputDecoration(labelText: 'Подтверждение пароля'),
                 validator: _validatePasswordConfirmation,
                 onChanged: (_) => authController.clearError(),
               ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _submit,
-                child: const Text('Зарегистрироваться'),
+                onPressed: authController.isBusy ? null : _submit,
+                child: authController.isBusy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Зарегистрироваться'),
               ),
               const SizedBox(height: 8),
               TextButton(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: authController.isBusy
+                    ? null
+                    : () => Navigator.of(context).pop(),
                 child: const Text('Вернуться ко входу'),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Роль нового пользователя: сотрудник (создавать товары нельзя).',
+                style: TextStyle(color: Colors.black54),
               ),
             ],
           ),

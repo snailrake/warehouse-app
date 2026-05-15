@@ -1,16 +1,9 @@
 import '../models/product.dart';
+import '../product_defaults.dart';
+import 'product_repository.dart';
 
-class MockProductRepository {
-  static const placeholderImagePath = 'assets/images/product_placeholder.png';
-
-  MockProductRepository() {
-    final maxId = _products.fold<int>(0, (max, product) {
-      return product.id > max ? product.id : max;
-    });
-    _nextId = maxId + 1;
-  }
-
-  late int _nextId;
+class MockProductRepository implements ProductRepository {
+  int _nextId = 5;
 
   final List<Product> _products = [
     Product(
@@ -19,8 +12,10 @@ class MockProductRepository {
       shortDescription: 'Ручной сканер для быстрой приемки товаров.',
       description:
           'Компактный сканер штрихкодов для работы на складе. Подходит для приемки, инвентаризации и быстрой проверки позиций.',
-      imagePath: placeholderImagePath,
+      imagePath: ProductDefaults.placeholderImagePath,
       status: ProductStatus.available,
+      takenByUserId: null,
+      takenAt: null,
     ),
     Product(
       id: 2,
@@ -28,8 +23,10 @@ class MockProductRepository {
       shortDescription: 'Мобильное устройство для учета остатков.',
       description:
           'Терминал помогает сотрудникам склада сканировать товары, сверять остатки и быстро обновлять информацию по позициям.',
-      imagePath: placeholderImagePath,
+      imagePath: ProductDefaults.placeholderImagePath,
       status: ProductStatus.reserved,
+      takenByUserId: 1,
+      takenAt: DateTime.now(),
     ),
     Product(
       id: 3,
@@ -37,8 +34,10 @@ class MockProductRepository {
       shortDescription: 'Печать маркировки и складских стикеров.',
       description:
           'Настольный принтер этикеток для маркировки товара, коробок и полок. Удобен для повседневной работы на складе.',
-      imagePath: placeholderImagePath,
+      imagePath: ProductDefaults.placeholderImagePath,
       status: ProductStatus.available,
+      takenByUserId: null,
+      takenAt: null,
     ),
     Product(
       id: 4,
@@ -46,32 +45,36 @@ class MockProductRepository {
       shortDescription: 'Тележка для перемещения коробок по складу.',
       description:
           'Прочная складская тележка для перемещения грузов между зонами хранения и отгрузки. Подходит для ежедневной эксплуатации.',
-      imagePath: placeholderImagePath,
+      imagePath: ProductDefaults.placeholderImagePath,
       status: ProductStatus.reserved,
+      takenByUserId: 1,
+      takenAt: DateTime.now().subtract(const Duration(days: 1)),
     ),
   ];
 
-  List<Product> getProducts() {
+  @override
+  Future<List<Product>> getProducts() async {
     return List<Product>.unmodifiable(_products);
   }
 
-  Product? getProductById(int id) {
+  @override
+  Future<Product?> getProductById(int id) async {
     for (final product in _products) {
       if (product.id == id) {
         return product;
       }
     }
-
     return null;
   }
 
-  Product addProduct({
+  @override
+  Future<Product> addProduct({
     required String name,
     required String shortDescription,
     required String description,
     required String imagePath,
     required ProductStatus status,
-  }) {
+  }) async {
     final product = Product(
       id: _nextId,
       name: name,
@@ -79,10 +82,54 @@ class MockProductRepository {
       description: description,
       imagePath: imagePath,
       status: status,
+      takenByUserId: null,
+      takenAt: null,
     );
 
-    _products.insert(0, product);
     _nextId++;
+    _products.insert(0, product);
     return product;
+  }
+
+  @override
+  Future<ProductTakeResult> toggleTakeReturn({
+    required int productId,
+    required int userId,
+  }) async {
+    final index = _products.indexWhere((p) => p.id == productId);
+    if (index < 0) {
+      throw StateError('Product not found: $productId');
+    }
+
+    final current = _products[index];
+    final now = DateTime.now();
+
+    if (current.status == ProductStatus.available) {
+      final updated = Product(
+        id: current.id,
+        name: current.name,
+        shortDescription: current.shortDescription,
+        description: current.description,
+        imagePath: current.imagePath,
+        status: ProductStatus.reserved,
+        takenByUserId: userId,
+        takenAt: now,
+      );
+      _products[index] = updated;
+      return ProductTakeResult(product: updated, action: 'take');
+    }
+
+    final updated = Product(
+      id: current.id,
+      name: current.name,
+      shortDescription: current.shortDescription,
+      description: current.description,
+      imagePath: current.imagePath,
+      status: ProductStatus.available,
+      takenByUserId: null,
+      takenAt: null,
+    );
+    _products[index] = updated;
+    return ProductTakeResult(product: updated, action: 'return');
   }
 }

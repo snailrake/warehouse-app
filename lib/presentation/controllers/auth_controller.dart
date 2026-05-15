@@ -1,58 +1,79 @@
 import 'package:flutter/foundation.dart';
 
 import '../../data/models/app_user.dart';
-import '../../data/repositories/mock_auth_repository.dart';
+import '../../data/repositories/auth_repository.dart';
 
 class AuthController extends ChangeNotifier {
   AuthController(this._authRepository);
 
-  final MockAuthRepository _authRepository;
+  final AuthRepository _authRepository;
 
   AppUser? _currentUser;
   String? _errorMessage;
+  bool _busy = false;
 
   AppUser? get currentUser => _currentUser;
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _currentUser != null;
+  bool get isBusy => _busy;
 
-  bool login({
+  bool get canCreateProducts => _currentUser?.role == UserRole.admin;
+
+  Future<bool> login({
     required String email,
     required String password,
-  }) {
-    final user = _authRepository.login(email: email, password: password);
+  }) async {
+    if (_busy) {
+      return false;
+    }
+
+    _busy = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final user = await _authRepository.login(email: email, password: password);
 
     if (user == null) {
       _errorMessage = 'Неверный email или пароль.';
+      _busy = false;
       notifyListeners();
       return false;
     }
 
     _currentUser = user;
-    _errorMessage = null;
+    _busy = false;
     notifyListeners();
     return true;
   }
 
-  bool register({
+  Future<bool> register({
     required String name,
     required String email,
     required String password,
-  }) {
-    if (_authRepository.emailExists(email)) {
+  }) async {
+    if (_busy) {
+      return false;
+    }
+
+    _busy = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    if (await _authRepository.emailExists(email)) {
       _errorMessage = 'Пользователь с таким email уже существует.';
+      _busy = false;
       notifyListeners();
       return false;
     }
 
-    _authRepository.register(
-      AppUser(
-        name: name,
-        email: email,
-        password: password,
-      ),
+    await _authRepository.register(
+      name: name,
+      email: email,
+      password: password,
+      role: UserRole.employee,
     );
 
-    _errorMessage = null;
+    _busy = false;
     notifyListeners();
     return true;
   }
@@ -69,6 +90,7 @@ class AuthController extends ChangeNotifier {
   void logout() {
     _currentUser = null;
     _errorMessage = null;
+    _busy = false;
     notifyListeners();
   }
 }
